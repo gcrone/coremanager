@@ -1,6 +1,6 @@
 # CoreManager - Manage CPU Cores within application
 
-CoreManager is a singleton class which should be initialised with a
+CoreManager is a singleton class which should be configured with a
 list of CPU cores available to the application. Threads that require exclusive
 access to a CPU core can then request a core from the CoreManager
 which will allocate one of the cores from its list and set the CPU
