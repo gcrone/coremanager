@@ -39,14 +39,14 @@ void CoreManager::configure(const std::string& corelist) {
   m_configured = true;
 }
 
-void CoreManager::allocate(const std::string& name, int ncores) {
+void CoreManager::allocate(const std::string& name, unsigned int ncores) {
   if (m_availableCores.size() >= ncores) {
     if (m_allocations.find(name) == m_allocations.end()) {
       m_allocations[name] = std::vector<int>();
     }
     cpu_set_t pmask;
     CPU_ZERO(&pmask);
-    for (int i=0; i<ncores; ++i) {
+    for (unsigned int i=0; i<ncores; ++i) {
       int core = m_availableCores.back();
       m_availableCores.pop_back();
       CPU_SET(core, &pmask);
@@ -56,12 +56,39 @@ void CoreManager::allocate(const std::string& name, int ncores) {
     auto status=sched_setaffinity(0, sizeof(pmask), &pmask);
     if (status != 0) {
       // throw an ers Issue
-      throw (AffinitysettingFailed(ERS_HERE));
+      throw (AffinitySettingFailed(ERS_HERE));
     }
   }
   else {
     // throw an ers issue
     throw (AllocationFailed(ERS_HERE));
+  }
+}
+
+void CoreManager::release(const std::string& name) {
+  cpu_set_t pmask;
+  auto status = sched_getaffinity(0, sizeof(pmask), &pmask);
+  if (status != 0) {
+    throw (AffinityGettingFailed(ERS_HERE));
+  }
+  if (CPU_COUNT(&pmask) == 0) {
+    throw (AffinityNotSet(ERS_HERE));
+  }
+  for (int mycore = 0; mycore < CPU_SETSIZE; mycore++) {
+    if (CPU_ISSET(mycore, &pmask)) {
+      for (auto iter=m_allocations[name].begin(); iter!=m_allocations[name].end(); iter++) {
+        if (*iter == mycore) {
+          m_allocations[name].erase(iter);
+          if (m_allocations[name].size() == 0) {
+            m_allocations.erase(name);
+          }
+          m_nallocations--;
+          m_availableCores.push_back(mycore);
+          break;
+        }
+      }
+      break;
+    }
   }
 }
 

@@ -21,11 +21,19 @@ namespace dunedaq {
 ERS_DECLARE_ISSUE(coremanager,
                   AllocationFailed,
                   "insufficient reservable cores to satisfy request",
-  )
+                  ERS_EMPTY)
 ERS_DECLARE_ISSUE(coremanager,
-                  AffinitysettingFailed,
+                  AffinitySettingFailed,
                   "Failed to set affinity to requested cpu mask",
-  )
+                  ERS_EMPTY)
+ERS_DECLARE_ISSUE(coremanager,
+                  AffinityGettingFailed,
+                  "Failed to get affinity for current thread",
+                  ERS_EMPTY)
+ERS_DECLARE_ISSUE(coremanager,
+                  AffinityNotSet,
+                  "Release failed, no affinity set for current thread",
+                  ERS_EMPTY)
 
 namespace coremanager {
 
@@ -46,18 +54,19 @@ public:
   CoreManager& operator=(CoreManager&&) = delete;      ///< CoreManager is not move-assignable
 
     void configure(const std::string& corelist);
-    void allocate(const std::string& name, int ncores);
+    void allocate(const std::string& name, unsigned int ncores);
+    void release(const std::string& name);
     void reset();
     void dump();
-    int available() const {return m_availableCores.size();}
-    int allocated() const {return m_nallocations;}
+    unsigned int available() const {return m_availableCores.size();}
+    unsigned int allocated() const {return m_nallocations;}
   private:
-    CoreManager() : m_configured(false) {}
+    CoreManager() : m_nallocations(0), m_configured(false) {}
 
     static std::shared_ptr<CoreManager> s_instance;
     std::vector<int> m_availableCores;
     std::map<std::string,std::vector<int>> m_allocations;
-    int m_nallocations;
+    unsigned int m_nallocations;
     bool m_configured;
   };
 
