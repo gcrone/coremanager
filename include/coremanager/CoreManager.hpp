@@ -13,6 +13,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <unistd.h>
 
 #include "ers/ers.hpp"
 
@@ -24,8 +25,8 @@ ERS_DECLARE_ISSUE(coremanager,
                   ERS_EMPTY)
 ERS_DECLARE_ISSUE(coremanager,
                   AffinitySettingFailed,
-                  "Failed to set affinity to requested cpu mask",
-                  ERS_EMPTY)
+                  "Failed to set affinity to requested cpu mask, " << reason,
+                  ((std::string) reason))
 ERS_DECLARE_ISSUE(coremanager,
                   AffinityGettingFailed,
                   "Failed to get affinity for current thread",
@@ -55,15 +56,19 @@ public:
 
     void configure(const std::string& corelist);
     void allocate(const std::string& name, unsigned int ncores);
+    void setAffinity(const std::string& name);
     void release(const std::string& name);
     void reset();
     void dump();
     unsigned int available() const {return m_availableCores.size();}
     unsigned int allocated() const {return m_nallocations;}
+    std::string affinityString();
   private:
-    CoreManager() : m_nallocations(0), m_configured(false) {}
+    CoreManager() : m_pid(getpid()), m_nallocations(0), m_configured(false) {}
 
     static std::shared_ptr<CoreManager> s_instance;
+    pid_t m_pid;
+    cpu_set_t m_pmask;
     std::vector<int> m_availableCores;
     std::map<std::string,std::vector<int>> m_allocations;
     unsigned int m_nallocations;

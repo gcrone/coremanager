@@ -18,18 +18,14 @@ daq_setup_environment()
 find_package(Boost COMPONENTS unit_test_framework REQUIRED)
 
 find_package(ers REQUIRED)
+find_package(logging REQUIRED)
 
 ##############################################################################
 
 
-# See https://dune-daq-sw.readthedocs.io/en/latest/packages/daq-cmake/#daq_add_library
-
-daq_add_library(CoreManager.cpp LINK_LIBRARIES ers::ers) # Any source files and/or dependent libraries to link in not yet determined
+daq_add_library(CoreManager.cpp LINK_LIBRARIES ers::ers logging::logging)
 
 ##############################################################################
-
-
-# See https://dune-daq-sw.readthedocs.io/en/latest/packages/daq-cmake/#daq_add_unit_test
 
 daq_add_unit_test(CoreManager_test LINK_LIBRARIES coremanager ers::ers)
 

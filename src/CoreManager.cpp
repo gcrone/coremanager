@@ -6,8 +6,11 @@
  * received with this code.
  */
 
+#include "logging/Logging.hpp"
+
 #include "coremanager/CoreManager.hpp"
 
+#include <cstring>
 #include <memory>
 #include <regex>
 #include <iostream>
@@ -18,6 +21,9 @@ namespace dunedaq::coremanager {
   std::shared_ptr<CoreManager> CoreManager::s_instance = nullptr;
 
 void CoreManager::configure(const std::string& corelist) {
+  // Make sure we start from a known position
+  reset();
+
   static const std::regex re(
     R"(((\d+)-(\d+))|((\d+)\.\.(\d+))|\d+)");
   std::smatch sm;
@@ -36,59 +42,95 @@ void CoreManager::configure(const std::string& corelist) {
       m_availableCores.push_back(std::stoi(sm[0]));
     }
   }
+
+  // Set our processor mask to all available cores
+  CPU_ZERO(&m_pmask);
+  for (auto core : m_availableCores) {
+    CPU_SET(core, &m_pmask);
+  }
+
+  TLOG() << "Now have " << CPU_COUNT(&m_pmask) << " cores for general use";
+  // And set affinity to that mask
+  auto status=sched_setaffinity(m_pid, sizeof(m_pmask), &m_pmask);
+  if (status != 0) {
+    throw (AffinitySettingFailed(ERS_HERE, std::strerror(errno)));
+  }
+
   m_configured = true;
 }
 
 void CoreManager::allocate(const std::string& name, unsigned int ncores) {
-  if (m_availableCores.size() >= ncores) {
-    if (m_allocations.find(name) == m_allocations.end()) {
-      m_allocations[name] = std::vector<int>();
+  TLOG() << "Reserving " << ncores << " cores for " << name;
+  if (ncores > 0) {
+    if (m_availableCores.size() >= ncores) {
+      if (m_allocations.find(name) == m_allocations.end()) {
+        m_allocations[name] = std::vector<int>();
+      }
+      for (unsigned int i=0; i<ncores; ++i) {
+        auto core = m_availableCores.back();
+        m_allocations[name].push_back(core);
+        m_availableCores.pop_back();
+        m_nallocations++;
+        CPU_CLR(core, &m_pmask);
+      }
+      TLOG() << "Now have " << CPU_COUNT(&m_pmask) << " cores for general use";
+      auto status = sched_setaffinity(m_pid, sizeof(m_pmask), &m_pmask);
+      if (status != 0) {
+        throw (AffinitySettingFailed(ERS_HERE,std::strerror(errno)));
+      }
     }
+    else {
+      // throw an ers issue
+      throw (AllocationFailed(ERS_HERE));
+    }
+  }
+}
+
+void CoreManager::setAffinity(const std::string& name) {
+  TLOG() << "Setting affinity for " << name
+         << " (thread " << pthread_self() << ")";
+  if (m_allocations.find(name) != m_allocations.end()) {
     cpu_set_t pmask;
     CPU_ZERO(&pmask);
-    for (unsigned int i=0; i<ncores; ++i) {
-      int core = m_availableCores.back();
-      m_availableCores.pop_back();
+    for (auto core : m_allocations[name]) {
       CPU_SET(core, &pmask);
-      m_allocations[name].push_back(core);
-      m_nallocations++;
     }
-    auto status=sched_setaffinity(0, sizeof(pmask), &pmask);
+    int status = sched_setaffinity(0, sizeof(pmask), &pmask);
     if (status != 0) {
-      // throw an ers Issue
-      throw (AffinitySettingFailed(ERS_HERE));
+      throw (AffinitySettingFailed(ERS_HERE,std::strerror(errno)));
     }
   }
   else {
-    // throw an ers issue
-    throw (AllocationFailed(ERS_HERE));
+    auto status = sched_setaffinity(0, sizeof(m_pmask), &m_pmask);
+    if (status != 0) {
+      throw (AffinitySettingFailed(ERS_HERE,std::strerror(errno)));
+    }
   }
 }
 
 void CoreManager::release(const std::string& name) {
-  cpu_set_t pmask;
-  auto status = sched_getaffinity(0, sizeof(pmask), &pmask);
-  if (status != 0) {
-    throw (AffinityGettingFailed(ERS_HERE));
-  }
-  if (CPU_COUNT(&pmask) == 0) {
-    throw (AffinityNotSet(ERS_HERE));
-  }
-  for (int mycore = 0; mycore < CPU_SETSIZE; mycore++) {
-    if (CPU_ISSET(mycore, &pmask)) {
-      for (auto iter=m_allocations[name].begin(); iter!=m_allocations[name].end(); iter++) {
-        if (*iter == mycore) {
-          m_allocations[name].erase(iter);
-          if (m_allocations[name].size() == 0) {
-            m_allocations.erase(name);
-          }
-          m_nallocations--;
-          m_availableCores.push_back(mycore);
-          break;
-        }
-      }
-      break;
+  if (m_allocations.find(name) != m_allocations.end()) {
+    cpu_set_t pmask;
+    CPU_ZERO(&pmask);
+    for (auto core : m_allocations[name]) {
+      CPU_SET(core, &pmask);
+      m_nallocations--;
+      m_availableCores.push_back(core);
     }
+    m_allocations.erase(name);
+
+    // Put the cores we're releasing back into the process general CPU set
+    CPU_OR(&m_pmask, &m_pmask, &pmask);
+    TLOG() << "Now have " << CPU_COUNT(&m_pmask) << " cores for general use";
+    int status = sched_setaffinity(m_pid, sizeof(m_pmask), &m_pmask);
+    if (status != 0) {
+      throw (AffinitySettingFailed(ERS_HERE,std::strerror(errno)));
+    }
+  }
+
+  int status = sched_setaffinity(0, sizeof(m_pmask), &m_pmask);
+  if (status != 0) {
+    throw (AffinitySettingFailed(ERS_HERE,std::strerror(errno)));
   }
 }
 
@@ -97,6 +139,24 @@ void CoreManager::reset() {
   m_availableCores.clear();
   m_nallocations = 0;
   m_configured = false;
+}
+
+std::string CoreManager::affinityString() {
+  cpu_set_t pmask;
+  auto status = sched_getaffinity(0, sizeof(pmask), &pmask);
+  if (status != 0) {
+    throw (AffinityGettingFailed(ERS_HERE));
+  }
+  std::ostringstream stream;
+  auto ncores = CPU_COUNT(&pmask);
+  stream << "Affinity currently set to " << ncores
+         << " core" << (ncores>1 ? "s:" : ":");
+  for (int core = 0; core < CPU_SETSIZE; core++) {
+    if (CPU_ISSET(core, &pmask)) {
+      stream << " " << core;
+    }
+  }
+  return stream.str();
 }
 
 void CoreManager::dump() {
