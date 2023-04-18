@@ -13,5 +13,8 @@ CoreManager via the release method.
 
 In this scheme, before instantiating DAQ modules, the application
 framework obtains the available core information from OKS and
-initialises CoreManager. It then makes a CoreManager requests for one
-or more cores which will be used for unpinned threads.
+initialises CoreManager. Individual DAQ modules should then request
+cores for exclusive use by their threads by calling
+`CoreManager::allocate()` during initialisation and the threads
+themselves should call `CoreManager::setAffinity()` to set affinity to
+their allocated CPUs.
