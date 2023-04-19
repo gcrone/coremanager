@@ -25,21 +25,35 @@ void CoreManager::configure(const std::string& corelist) {
   reset();
 
   static const std::regex re(
-    R"(((\d+)-(\d+))|((\d+)\.\.(\d+))|\d+)");
+    R"(((\d+)-(\d+)(:(\d))?)|((\d+)\.\.(\d+)(:(\d))?)|\d+)");
   std::smatch sm;
   for (std::string s(corelist); std::regex_search(s, sm, re); s = sm.suffix()) {
+    int start;
+    int end;
+    int step = 1;
     if (sm[2].length()) {
-      for (int i = std::stoi(sm[2]); i <= std::stoi(sm[3]); ++i) {
-        m_availableCores.push_back(i);
+      // n-m
+      start = std::stoi(sm[2]);
+      end = std::stoi(sm[3]);
+      if (sm[5].length()) {
+        step = std::stoi(sm[5]);
       }
     }
-    else if (sm[5].length()) {
-      for (int i = std::stoi(sm[5]); i <= std::stoi(sm[6]); ++i) {
-        m_availableCores.push_back(i);
+    else if (sm[7].length()) {
+      // n..m
+      start = std::stoi(sm[7]);
+      end = std::stoi(sm[8]);
+      if (sm[10].length()) {
+        step = std::stoi(sm[10]);
       }
     }
     else {
-      m_availableCores.push_back(std::stoi(sm[0]));
+      start = std::stoi(sm[0]);
+      end = std::stoi(sm[0]);
+      step = 1;
+    }
+    for (int i = start; i <= end; i += step) {
+      m_availableCores.push_back(i);
     }
   }
 
