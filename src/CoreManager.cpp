@@ -10,6 +10,10 @@
 
 #include "coremanager/CoreManager.hpp"
 
+#include "dunedaqdal/DaqApplication.hpp"
+#include "dunedaqdal/Host.hpp"
+#include "dunedaqdal/NumaNode.hpp"
+
 #include <cstring>
 #include <memory>
 #include <regex>
@@ -20,10 +24,8 @@
 namespace dunedaq::coremanager {
   std::shared_ptr<CoreManager> CoreManager::s_instance = nullptr;
 
-void CoreManager::configure(const std::string& corelist) {
-  // Make sure we start from a known position
-  reset();
-
+std::vector<int> CoreManager::parseCoreList(const std::string& corelist) {
+  std::vector<int> result;
   static const std::regex re(
     R"(((\d+)-(\d+)(:(\d))?)|((\d+)\.\.(\d+)(:(\d))?)|\d+)");
   std::smatch sm;
@@ -53,50 +55,76 @@ void CoreManager::configure(const std::string& corelist) {
       step = 1;
     }
     for (int i = start; i <= end; i += step) {
-      m_availableCores.push_back(i);
+      result.push_back(i);
     }
   }
+  return result;
+}
+void CoreManager::configure(const std::string& corelist) {
+  // Make sure we start from a known position
+  reset();
 
+  m_cores[0] = parseCoreList(corelist);
+  setPmask();
+  m_configured = true;
+}
+
+void CoreManager::configure(const dunedaq::dal::DaqApplication* app) {
+  // Make sure we start from a known position
+  reset();
+
+  auto host = app->get_host();
+  auto numa = host->get_numa_nodes();
+  std::string corelist;
+
+  for (auto node : app->get_numa_node()) {
+    m_cores[node] = parseCoreList(numa[node]->get_cpu_cores());
+  }
+  setPmask();
+  m_configured = true;
+}
+  void CoreManager::setPmask() {
   // Set our processor mask to all available cores
   CPU_ZERO(&m_pmask);
-  for (auto core : m_availableCores) {
-    CPU_SET(core, &m_pmask);
+  for (auto node : m_cores) {
+    for (auto core : node.second) {
+      CPU_SET(core, &m_pmask);
+    }
   }
-
   TLOG() << "Now have " << CPU_COUNT(&m_pmask) << " cores for general use";
   // And set affinity to that mask
   auto status=sched_setaffinity(m_pid, sizeof(m_pmask), &m_pmask);
   if (status != 0) {
     throw (AffinitySettingFailed(ERS_HERE, std::strerror(errno)));
   }
-
-  m_configured = true;
 }
 
-void CoreManager::allocate(const std::string& name, unsigned int ncores) {
-  TLOG() << "Reserving " << ncores << " cores for " << name;
-  if (ncores > 0) {
-    if (m_availableCores.size() >= ncores) {
-      if (m_allocations.find(name) == m_allocations.end()) {
-        m_allocations[name] = std::vector<int>();
-      }
-      for (unsigned int i=0; i<ncores; ++i) {
-        auto core = m_availableCores.back();
-        m_allocations[name].push_back(core);
-        m_availableCores.pop_back();
-        m_nallocations++;
-        CPU_CLR(core, &m_pmask);
-      }
-      TLOG() << "Now have " << CPU_COUNT(&m_pmask) << " cores for general use";
-      auto status = sched_setaffinity(m_pid, sizeof(m_pmask), &m_pmask);
-      if (status != 0) {
-        throw (AffinitySettingFailed(ERS_HERE,std::strerror(errno)));
+void CoreManager::allocate(const std::string& name, int16_t numaNode) {
+  if (numaNode == -1) {
+    // Select first node with spare cores
+    for (auto node : m_cores) {
+      if (node.second.size() > 0) {
+        numaNode = node.first;
+        break;
       }
     }
-    else {
-      // throw an ers issue
-      throw (AllocationFailed(ERS_HERE));
-    }
+  }
+
+  TLOG() << "Reserving core for " << name << " on NUMA node " << numaNode;
+  if (m_cores.find(numaNode) == m_cores.end() || m_cores[numaNode].size() == 0) {
+    // NUMA node is invalid or all cores of that node are already allocated
+    throw (AllocationFailed(ERS_HERE));
+  }
+
+  auto core = m_cores[numaNode].back();
+  m_cores[numaNode].pop_back();
+  m_allocations[name].push_back(core);
+  m_nallocations++;
+  CPU_CLR(core, &m_pmask);
+  TLOG() << "Now have " << CPU_COUNT(&m_pmask) << " cores for general use";
+  auto status = sched_setaffinity(m_pid, sizeof(m_pmask), &m_pmask);
+  if (status != 0) {
+    throw (AffinitySettingFailed(ERS_HERE,std::strerror(errno)));
   }
 }
 
@@ -129,7 +157,10 @@ void CoreManager::release(const std::string& name) {
     for (auto core : m_allocations[name]) {
       CPU_SET(core, &pmask);
       m_nallocations--;
-      m_availableCores.push_back(core);
+      //  Don't know where to put this core - do we need to add it back
+      // to the right list? If so, we need to store the numa node along
+      // with the core somewhere
+      //m_availableCores.push_back(core);
     }
     m_allocations.erase(name);
 
@@ -150,7 +181,7 @@ void CoreManager::release(const std::string& name) {
 
 void CoreManager::reset() {
   m_allocations.clear();
-  m_availableCores.clear();
+  m_cores.clear();
   m_nallocations = 0;
   m_configured = false;
 }
@@ -175,15 +206,18 @@ std::string CoreManager::affinityString() {
 
 void CoreManager::dump() {
   std::cout << "Dump of CoreManager:" << std::endl;
-  std::cout << "Available cores:";
-  if (m_availableCores.size() >0) {
-    for (auto core: m_availableCores) {
-      std::cout << " " << core;
+  std::cout << "Available cores:" << std::endl;
+  for (auto node : m_cores) {
+    if (node.second.size() > 0) {
+      std::cout << "  NUMA node " << node.first << ":";
+      for (auto core: node.second) {
+        std::cout << " " << core;
+      }
+      std::cout << std::endl;
     }
-    std::cout << std::endl;
-  }
-  else {
-    std::cout << "<none>" << std::endl;
+    else {
+      std::cout << "<none>" << std::endl;
+    }
   }
   std::cout << "Allocation table:" << std::endl;
   if (m_allocations.size() >0) {

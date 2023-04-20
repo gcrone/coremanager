@@ -9,13 +9,15 @@
 #ifndef COREMANAGER_INCLUDE_COREMANAGER_COREMANAGER_HPP_
 #define COREMANAGER_INCLUDE_COREMANAGER_COREMANAGER_HPP_
 
+#include "dunedaqdal/DaqApplication.hpp"
+
+#include "ers/ers.hpp"
+
 #include <map>
 #include <memory>
 #include <string>
 #include <vector>
 #include <unistd.h>
-
-#include "ers/ers.hpp"
 
 namespace dunedaq {
 
@@ -55,21 +57,27 @@ public:
   CoreManager& operator=(CoreManager&&) = delete;      ///< CoreManager is not move-assignable
 
     void configure(const std::string& corelist);
-    void allocate(const std::string& name, unsigned int ncores);
+    void configure(const dunedaq::dal::DaqApplication* app);
+
+    // void allocate(const std::string& name, unsigned int ncores);
+    void allocate(const std::string& name, int16_t numaNode);
     void setAffinity(const std::string& name);
     void release(const std::string& name);
     void reset();
     void dump();
-    unsigned int available() const {return m_availableCores.size();}
+    unsigned int available() const {return CPU_COUNT(&m_pmask);}
     unsigned int allocated() const {return m_nallocations;}
     std::string affinityString();
   private:
     CoreManager() : m_pid(getpid()), m_nallocations(0), m_configured(false) {}
 
+    std::vector<int> parseCoreList(const std::string& corelist);
+    void setPmask();
+
     static std::shared_ptr<CoreManager> s_instance;
     pid_t m_pid;
     cpu_set_t m_pmask;
-    std::vector<int> m_availableCores;
+    std::map<int, std::vector<int>> m_cores;
     std::map<std::string,std::vector<int>> m_allocations;
     unsigned int m_nallocations;
     bool m_configured;

@@ -19,11 +19,13 @@ find_package(Boost COMPONENTS unit_test_framework REQUIRED)
 
 find_package(ers REQUIRED)
 find_package(logging REQUIRED)
+find_package(dunedaqdal REQUIRED)
 
 ##############################################################################
 
 
-daq_add_library(CoreManager.cpp LINK_LIBRARIES ers::ers logging::logging)
+daq_add_library(CoreManager.cpp LINK_LIBRARIES ers::ers logging::logging
+  dunedaqdal::dunedaqdal)
 
 ##############################################################################
 
