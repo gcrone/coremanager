@@ -71,13 +71,13 @@ public:
   private:
     CoreManager() : m_pid(getpid()), m_nallocations(0), m_configured(false) {}
 
-    std::vector<int> parseCoreList(const std::string& corelist);
+    std::vector<uint16_t> parseCoreList(const std::string& corelist);
     void setPmask();
 
     static std::shared_ptr<CoreManager> s_instance;
     pid_t m_pid;
     cpu_set_t m_pmask;
-    std::map<int, std::vector<int>> m_cores;
+    std::map<uint8_t, std::vector<uint16_t>> m_cores;
     std::map<std::string,std::vector<int>> m_allocations;
     unsigned int m_nallocations;
     bool m_configured;

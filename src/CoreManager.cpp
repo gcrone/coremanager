@@ -11,8 +11,9 @@
 #include "coremanager/CoreManager.hpp"
 
 #include "dunedaqdal/DaqApplication.hpp"
-#include "dunedaqdal/Host.hpp"
-#include "dunedaqdal/NumaNode.hpp"
+#include "dunedaqdal/VirtualHost.hpp"
+#include "dunedaqdal/ProcessingResource.hpp"
+#include "dunedaqdal/ProcessingResourceClaim.hpp"
 
 #include <cstring>
 #include <memory>
@@ -24,8 +25,8 @@
 namespace dunedaq::coremanager {
   std::shared_ptr<CoreManager> CoreManager::s_instance = nullptr;
 
-std::vector<int> CoreManager::parseCoreList(const std::string& corelist) {
-  std::vector<int> result;
+std::vector<uint16_t> CoreManager::parseCoreList(const std::string& corelist) {
+  std::vector<uint16_t> result;
   static const std::regex re(
     R"(((\d+)-(\d+)(:(\d))?)|((\d+)\.\.(\d+)(:(\d))?)|\d+)");
   std::smatch sm;
@@ -74,11 +75,12 @@ void CoreManager::configure(const dunedaq::dal::DaqApplication* app) {
   reset();
 
   auto host = app->get_host();
-  auto numa = host->get_numa_nodes();
-  std::string corelist;
 
-  for (auto node : app->get_numa_node()) {
-    m_cores[node] = parseCoreList(numa[node]->get_cpu_cores());
+  for (auto resource : host->get_hw_resources()) {
+    auto proc = resource->cast<dunedaq::dal::ProcessingResource>();
+    if (proc) {
+      m_cores[proc->get_numa_id()] = proc->get_cpu_cores();
+    }
   }
   setPmask();
   m_configured = true;

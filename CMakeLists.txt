@@ -29,7 +29,7 @@ daq_add_library(CoreManager.cpp LINK_LIBRARIES ers::ers logging::logging
 
 ##############################################################################
 
-daq_add_unit_test(CoreManager_test LINK_LIBRARIES coremanager ers::ers)
+daq_add_unit_test(CoreManager_test LINK_LIBRARIES coremanager dunedaqdal::dunedaqdal ers::ers)
 
 ##############################################################################
 
