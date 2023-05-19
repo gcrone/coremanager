@@ -13,7 +13,6 @@
 #include "dunedaqdal/DaqApplication.hpp"
 #include "dunedaqdal/VirtualHost.hpp"
 #include "dunedaqdal/ProcessingResource.hpp"
-#include "dunedaqdal/ProcessingResourceClaim.hpp"
 
 #include <cstring>
 #include <memory>
@@ -210,8 +209,8 @@ void CoreManager::dump() {
   std::cout << "Dump of CoreManager:" << std::endl;
   std::cout << "Available cores:" << std::endl;
   for (auto node : m_cores) {
+    std::cout << "  NUMA node " << (int) node.first << ":";
     if (node.second.size() > 0) {
-      std::cout << "  NUMA node " << node.first << ":";
       for (auto core: node.second) {
         std::cout << " " << core;
       }
