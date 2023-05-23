@@ -9,7 +9,7 @@
 #ifndef COREMANAGER_INCLUDE_COREMANAGER_COREMANAGER_HPP_
 #define COREMANAGER_INCLUDE_COREMANAGER_COREMANAGER_HPP_
 
-#include "dunedaqdal/DaqApplication.hpp"
+#include "coredal/DaqApplication.hpp"
 
 #include "ers/ers.hpp"
 
@@ -57,7 +57,7 @@ public:
   CoreManager& operator=(CoreManager&&) = delete;      ///< CoreManager is not move-assignable
 
     void configure(const std::string& corelist);
-    void configure(const dunedaq::dal::DaqApplication* app);
+    void configure(const dunedaq::coredal::DaqApplication* app);
 
     // void allocate(const std::string& name, unsigned int ncores);
     void allocate(const std::string& name, int16_t numaNode);

@@ -10,9 +10,9 @@
 
 #include "coremanager/CoreManager.hpp"
 
-#include "dunedaqdal/DaqApplication.hpp"
-#include "dunedaqdal/VirtualHost.hpp"
-#include "dunedaqdal/ProcessingResource.hpp"
+#include "coredal/DaqApplication.hpp"
+#include "coredal/VirtualHost.hpp"
+#include "coredal/ProcessingResource.hpp"
 
 #include <cstring>
 #include <memory>
@@ -69,14 +69,14 @@ void CoreManager::configure(const std::string& corelist) {
   m_configured = true;
 }
 
-void CoreManager::configure(const dunedaq::dal::DaqApplication* app) {
+void CoreManager::configure(const dunedaq::coredal::DaqApplication* app) {
   // Make sure we start from a known position
   reset();
 
   auto host = app->get_host();
 
   for (auto resource : host->get_hw_resources()) {
-    auto proc = resource->cast<dunedaq::dal::ProcessingResource>();
+    auto proc = resource->cast<dunedaq::coredal::ProcessingResource>();
     if (proc) {
       m_cores[proc->get_numa_id()] = proc->get_cpu_cores();
     }

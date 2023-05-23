@@ -19,17 +19,17 @@ find_package(Boost COMPONENTS unit_test_framework REQUIRED)
 
 find_package(ers REQUIRED)
 find_package(logging REQUIRED)
-find_package(dunedaqdal REQUIRED)
+find_package(coredal REQUIRED)
 
 ##############################################################################
 
 
 daq_add_library(CoreManager.cpp LINK_LIBRARIES ers::ers logging::logging
-  dunedaqdal::dunedaqdal)
+  coredal::coredal)
 
 ##############################################################################
 
-daq_add_unit_test(CoreManager_test LINK_LIBRARIES coremanager dunedaqdal::dunedaqdal ers::ers)
+daq_add_unit_test(CoreManager_test LINK_LIBRARIES coremanager coredal::coredal ers::ers)
 
 ##############################################################################
 
