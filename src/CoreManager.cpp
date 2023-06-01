@@ -73,9 +73,9 @@ void CoreManager::configure(const dunedaq::coredal::DaqApplication* app) {
   // Make sure we start from a known position
   reset();
 
-  auto host = app->get_host();
+  auto host = app->get_runs_on();
 
-  for (auto resource : host->get_hw_resources()) {
+  for (auto resource : host->get_uses()) {
     auto proc = resource->cast<dunedaq::coredal::ProcessingResource>();
     if (proc) {
       m_cores[proc->get_numa_id()] = proc->get_cpu_cores();
